@@ -33,3 +33,20 @@ export type ChatMessage = {
   citations?: Citation[];
   trace?: { steps: TraceStep[] };
 };
+
+export type QuizQuestion = {
+  question: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+};
+
+export type Quiz = {
+  title: string;
+  questions: QuizQuestion[];
+};
+
+export type QuizResult = {
+  quiz: Quiz;
+  trace: { steps: TraceStep[] };
+};

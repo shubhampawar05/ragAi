@@ -37,6 +37,10 @@ export async function ragQuery(body: {
   question: string;
   documentId?: string | null;
   topK?: number;
+  preset?: import("../types/prompt").PromptPreset;
+  promptMode?: import("../types/prompt").PromptMode;
+  persona?: import("../types/prompt").Persona;
+  chainOfThought?: boolean;
 }) {
   const res = await fetch(`${API_URL}/api/rag/query`, {
     method: "POST",
@@ -44,5 +48,19 @@ export async function ragQuery(body: {
     body: JSON.stringify(body),
   });
   const json = await parseJson<{ data: import("../types/rag").RagQueryResult }>(res);
+  return json.data;
+}
+
+export async function generateQuiz(body: {
+  documentId?: string | null;
+  topic?: string;
+  questionCount?: number;
+}) {
+  const res = await fetch(`${API_URL}/api/quiz/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await parseJson<{ data: import("../types/rag").QuizResult }>(res);
   return json.data;
 }

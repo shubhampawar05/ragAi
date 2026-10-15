@@ -1,7 +1,11 @@
 "use client";
 
 import { RagPipelineBar } from "@/components/journey/RagPipelineBar";
-import { fetchDocuments, ragQuery, uploadDocument } from "@/lib/api";
+import { PromptSettings } from "@/components/rag/PromptSettings";
+import { QuizPanel } from "@/components/rag/QuizPanel";
+import { fetchDocuments, generateQuiz, ragQuery, uploadDocument } from "@/lib/api";
+import { DEFAULT_PROMPT_OPTIONS } from "@/types/prompt";
+import type { Quiz } from "@/types/rag";
 import {
   activeStepCaption,
   buildIngestStatuses,
@@ -42,6 +46,10 @@ export function RagWorkspace() {
   const [queryComplete, setQueryComplete] = useState(false);
   const [queryError, setQueryError] = useState(false);
   const [lastRetrievedCount, setLastRetrievedCount] = useState<number | undefined>();
+  const [promptOptions, setPromptOptions] = useState(DEFAULT_PROMPT_OPTIONS);
+  const [quiz, setQuiz] = useState<Quiz | null>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizTrace, setQuizTrace] = useState<TraceStep[] | null>(null);
 
   const loadDocs = useCallback(async () => {
     try {
@@ -131,6 +139,7 @@ export function RagWorkspace() {
         question,
         documentId: selectedDocId === "all" ? null : selectedDocId,
         topK: DEFAULT_TOP_K,
+        ...promptOptions,
       });
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -178,7 +187,13 @@ export function RagWorkspace() {
     <div className="flex h-[calc(100vh-0px)] min-h-screen bg-zinc-50 text-zinc-900">
       <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 bg-white p-4">
         <h1 className="text-lg font-semibold tracking-tight">RAG Lab</h1>
-        <p className="mt-1 text-xs text-zinc-500">Phase 1 — ingest &amp; cited Q&amp;A</p>
+        <p className="mt-1 text-xs text-zinc-500">Phase 2 — prompting &amp; quiz</p>
+
+        <PromptSettings
+          value={promptOptions}
+          onChange={setPromptOptions}
+          disabled={loading}
+        />
 
         <label
           className="mt-6 flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-zinc-300 bg-zinc-50 px-3 py-4 text-center text-sm font-medium text-zinc-700 hover:bg-zinc-100"
@@ -222,6 +237,31 @@ export function RagWorkspace() {
         >
           Search all documents
         </button>
+
+        <QuizPanel
+          quiz={quiz}
+          loading={quizLoading}
+          disabled={!hasReadyDocs}
+          trace={quizTrace}
+          onShowTrace={(steps) => setActiveTrace(steps)}
+          onGenerate={async (topic) => {
+            setQuizLoading(true);
+            setError(null);
+            try {
+              const result = await generateQuiz({
+                topic,
+                documentId: selectedDocId === "all" ? null : selectedDocId,
+                questionCount: 5,
+              });
+              setQuiz(result.quiz);
+              setQuizTrace(result.trace.steps);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Quiz generation failed");
+            } finally {
+              setQuizLoading(false);
+            }
+          }}
+        />
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -335,7 +375,7 @@ export function RagWorkspace() {
           {showJourney && (
             <aside className="hidden w-96 shrink-0 overflow-y-auto border-l border-zinc-200 bg-white p-4 lg:block">
               <h2 className="text-sm font-semibold">Message journey</h2>
-              <p className="mt-1 text-xs text-zinc-500">Retrieval &amp; prompt (Phase 1)</p>
+              <p className="mt-1 text-xs text-zinc-500">Retrieval, prompt settings &amp; usage</p>
               {!activeTrace && (
                 <p className="mt-4 text-sm text-zinc-500">Send a question to see the pipeline.</p>
               )}
