@@ -1,8 +1,21 @@
-const SYSTEM = `You are a helpful study assistant. Answer ONLY using the provided context.
-If the context does not contain enough information, say "I don't know based on the uploaded documents."
-Cite sources by mentioning the filename when relevant. Be concise and accurate.`;
+import {
+  buildSystemPrompt,
+  FEW_SHOT_MESSAGES,
+  PHASE1_SYSTEM_PROMPT,
+} from "../llm/promptModes.js";
 
-export function buildRagPrompt({ question, chunks }) {
+export function buildRagPrompt({
+  question,
+  chunks,
+  preset = "phase1",
+  promptMode = "zeroShot",
+  persona = "study",
+  chainOfThought = false,
+}) {
+  const usePhase1 = preset === "phase1";
+  const system = usePhase1
+    ? PHASE1_SYSTEM_PROMPT
+    : buildSystemPrompt({ persona, chainOfThought });
   const contextBlock = chunks
     .map(
       (c, i) =>
@@ -12,10 +25,26 @@ export function buildRagPrompt({ question, chunks }) {
 
   const userContent = `### Context\n${contextBlock}\n\n### Question\n${question}`;
 
+  const fewShot =
+    !usePhase1 && promptMode === "fewShot" ? FEW_SHOT_MESSAGES : [];
+
   return {
-    system: SYSTEM,
+    system,
+    promptConfig: usePhase1
+      ? {
+          preset: "phase1",
+          label: "From your documents only (recommended)",
+        }
+      : {
+          preset: "custom",
+          label: "Customize tone & teaching style",
+          promptMode,
+          persona,
+          chainOfThought,
+        },
     messages: [
-      { role: "system", content: SYSTEM },
+      { role: "system", content: system },
+      ...fewShot,
       { role: "user", content: userContent },
     ],
     augmentedUser: userContent,

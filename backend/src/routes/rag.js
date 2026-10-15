@@ -13,6 +13,10 @@ router.post(
       question: body.question,
       documentId: body.documentId ?? null,
       topK: body.topK,
+      preset: body.preset,
+      promptMode: body.promptMode,
+      persona: body.persona,
+      chainOfThought: body.chainOfThought,
     });
     res.json({ data: result });
   }),

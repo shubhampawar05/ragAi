@@ -6,6 +6,7 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import documentsRouter from "./routes/documents.js";
 import healthRouter from "./routes/health.js";
 import ingestRouter from "./routes/ingest.js";
+import quizRouter from "./routes/quiz.js";
 import ragRouter from "./routes/rag.js";
 
 export function createApp() {
@@ -24,6 +25,7 @@ export function createApp() {
   app.use("/api/documents", documentsRouter);
   app.use("/api/ingest", ingestRouter);
   app.use("/api/rag", ragRouter);
+  app.use("/api/quiz", quizRouter);
 
   app.use(errorHandler);
   return app;

@@ -18,11 +18,23 @@ function toCitations(chunks) {
   }));
 }
 
-export async function ragQuery({ question, documentId, topK = 5 }) {
+export async function ragQuery({
+  question,
+  documentId,
+  topK = 5,
+  preset = "phase1",
+  promptMode = "zeroShot",
+  persona = "study",
+  chainOfThought = false,
+}) {
   const retrieved = await retrieveChunks(question, { topK, documentId });
-  const { messages, augmentedUser, system } = buildRagPrompt({
+  const { messages, augmentedUser, system, promptConfig } = buildRagPrompt({
     question,
     chunks: retrieved,
+    preset,
+    promptMode,
+    persona,
+    chainOfThought,
   });
 
   const openai = getOpenAI();
@@ -48,9 +60,11 @@ export async function ragQuery({ question, documentId, topK = 5 }) {
         preview: c.content.slice(0, 120),
       })),
     }),
+    traceStep("promptConfig", "Prompt settings (Phase 2)", promptConfig),
     traceStep("augmentedPrompt", "Augmented prompt", {
       system,
       user: truncate(augmentedUser),
+      messageCount: messages.length,
     }),
     traceStep("answer", "Model answer", { text: answer }),
     traceStep("usage", "Token usage", {
