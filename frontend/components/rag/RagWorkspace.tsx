@@ -1,8 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { RagPipelineBar } from "@/components/journey/RagPipelineBar";
 import { fetchDocuments, ragQuery, uploadDocument } from "@/lib/api";
+import {
+  activeStepCaption,
+  buildIngestStatuses,
+  buildQueryStatuses,
+  INGEST_STEPS,
+  QUERY_STEPS,
+} from "@/lib/pipelineSteps";
 import type { ChatMessage, DocumentRow, TraceStep } from "@/types/rag";
+import { useCallback, useEffect, useState } from "react";
+
+const DEFAULT_TOP_K = 5;
+const INGEST_STEP_MS = 400;
+const QUERY_STEP_MS = 350;
 
 function statusColor(status: DocumentRow["status"]) {
   if (status === "ready") return "text-emerald-600";
@@ -19,7 +31,17 @@ export function RagWorkspace() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showJourney, setShowJourney] = useState(true);
+  const [showPipeline, setShowPipeline] = useState(true);
   const [activeTrace, setActiveTrace] = useState<TraceStep[] | null>(null);
+
+  const [ingestStepIndex, setIngestStepIndex] = useState(0);
+  const [ingestComplete, setIngestComplete] = useState(false);
+  const [ingestError, setIngestError] = useState(false);
+
+  const [queryStepIndex, setQueryStepIndex] = useState(0);
+  const [queryComplete, setQueryComplete] = useState(false);
+  const [queryError, setQueryError] = useState(false);
+  const [lastRetrievedCount, setLastRetrievedCount] = useState<number | undefined>();
 
   const loadDocs = useCallback(async () => {
     try {
@@ -31,19 +53,55 @@ export function RagWorkspace() {
   }, []);
 
   useEffect(() => {
-    loadDocs();
-  }, [loadDocs]);
+    let cancelled = false;
+    fetchDocuments()
+      .then((docs) => {
+        if (!cancelled) setDocuments(docs);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load documents");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!uploading) return;
+    const max = INGEST_STEPS.length - 1;
+    const timer = setInterval(() => {
+      setIngestStepIndex((i) => (i < max ? i + 1 : i));
+    }, INGEST_STEP_MS);
+    return () => clearInterval(timer);
+  }, [uploading]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const max = QUERY_STEPS.length - 1;
+    const timer = setInterval(() => {
+      setQueryStepIndex((i) => (i < max ? i + 1 : i));
+    }, QUERY_STEP_MS);
+    return () => clearInterval(timer);
+  }, [loading]);
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     setError(null);
+    setIngestComplete(false);
+    setIngestError(false);
+    setIngestStepIndex(0);
     try {
       await uploadDocument(file);
       await loadDocs();
+      setIngestComplete(true);
+      setIngestStepIndex(INGEST_STEPS.length - 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
+      setIngestError(true);
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -64,11 +122,15 @@ export function RagWorkspace() {
     setInput("");
     setLoading(true);
     setError(null);
+    setQueryComplete(false);
+    setQueryError(false);
+    setQueryStepIndex(0);
 
     try {
       const result = await ragQuery({
         question,
         documentId: selectedDocId === "all" ? null : selectedDocId,
+        topK: DEFAULT_TOP_K,
       });
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -79,14 +141,38 @@ export function RagWorkspace() {
       };
       setMessages((m) => [...m, assistantMsg]);
       setActiveTrace(result.trace.steps);
+      setLastRetrievedCount(result.citations.length);
+      setQueryComplete(true);
+      setQueryStepIndex(QUERY_STEPS.length - 1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Query failed");
+      setQueryError(true);
     } finally {
       setLoading(false);
     }
   }
 
   const readyCount = documents.filter((d) => d.status === "ready").length;
+  const hasReadyDocs = readyCount > 0;
+
+  const ingestStatuses = buildIngestStatuses({
+    uploading,
+    activeStepIndex: ingestStepIndex,
+    ingestComplete: ingestComplete || hasReadyDocs,
+    ingestError,
+  });
+
+  const queryStatuses = buildQueryStatuses({
+    loading,
+    activeStepIndex: queryStepIndex,
+    queryComplete,
+    queryError,
+    hasReadyDocs,
+  });
+
+  const caption =
+    (uploading ? activeStepCaption(INGEST_STEPS, ingestStatuses) : null) ??
+    (loading ? activeStepCaption(QUERY_STEPS, queryStatuses) : null);
 
   return (
     <div className="flex h-[calc(100vh-0px)] min-h-screen bg-zinc-50 text-zinc-900">
@@ -139,7 +225,7 @@ export function RagWorkspace() {
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3">
+        <header className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white px-4 py-3">
           <span className="text-sm text-zinc-600">
             Scope:{" "}
             <strong>
@@ -148,15 +234,35 @@ export function RagWorkspace() {
                 : documents.find((d) => d.id === selectedDocId)?.filename ?? "—"}
             </strong>
           </span>
-          <label className="flex items-center gap-2 text-sm text-zinc-600">
-            <input
-              type="checkbox"
-              checked={showJourney}
-              onChange={(e) => setShowJourney(e.target.checked)}
-            />
-            Show journey
-          </label>
+          <div className="flex items-center gap-4 text-sm text-zinc-600">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showPipeline}
+                onChange={(e) => setShowPipeline(e.target.checked)}
+              />
+              Show pipeline
+            </label>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showJourney}
+                onChange={(e) => setShowJourney(e.target.checked)}
+              />
+              Show journey
+            </label>
+          </div>
         </header>
+
+        {showPipeline && (
+          <RagPipelineBar
+            ingestStatuses={ingestStatuses}
+            queryStatuses={queryStatuses}
+            caption={caption}
+            topK={DEFAULT_TOP_K}
+            retrievedCount={queryComplete && !loading ? lastRetrievedCount : undefined}
+          />
+        )}
 
         {error && (
           <div className="mx-4 mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
