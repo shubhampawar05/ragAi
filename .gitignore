@@ -26,6 +26,7 @@ frontend/.vercel
 # Backend
 backend/dist/
 backend/build/
+backend/storage/
 
 # TypeScript
 *.tsbuildinfo
@@ -38,9 +39,9 @@ backend/build/
 # Test coverage
 coverage/
 
-# Supabase local
-supabase/.branches
-supabase/.temp
+# Supabase CLI local (when run from backend/)
+backend/supabase/.branches
+backend/supabase/.temp
 
 
 .cursor

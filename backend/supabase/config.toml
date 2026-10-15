@@ -1,0 +1,17 @@
+# Supabase CLI — run all commands from `backend/` (parent of this folder).
+# https://supabase.com/docs/guides/cli/config
+
+project_id = "rag-lab-local"
+
+[db]
+major_version = 15
+port = 54322
+
+[db.migrations]
+enabled = true
+
+[api]
+enabled = false
+
+[studio]
+enabled = false
